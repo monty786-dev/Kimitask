@@ -1,0 +1,46 @@
+name: Build WinlatorShell
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MinGW-w64 & Inno Setup
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64
+          # Inno Setup runs under Wine on Linux CI runners
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y wine32 wine64
+          wget -q https://files.jrsoftware.org/is/6/innosetup-6.3.3.exe
+          wine innosetup-6.3.3.exe /VERYSILENT /SUPPRESSMSGBOXES
+
+      - name: Compile with MinGW-w64 (Win32, C11)
+        run: |
+          x86_64-w64-mingw32-gcc -std=c11 -O2 -mwindows \
+            -Iinclude \
+            src/main.c src/core/*.c src/wine_bridge/*.c src/ui/*.c \
+            src/themes/*.c src/taskbar/*.c src/startpanel/*.c \
+            src/desktop/*.c src/revealbar/*.c src/skinning/*.c \
+            src/cursor/*.c src/keyboard/*.c src/settings_gui/*.c \
+            src/appmgmt/*.c \
+            -o build/winlatorshell.exe \
+            -luser32 -lgdi32 -lgdiplus -lcomctl32 -lshell32 -lole32 \
+            -luuid -ladvapi32 -ldwmapi -lcomdlg32 -lshlwapi
+
+      - name: Build installer (Inno Setup via Wine)
+        run: |
+          wine "$HOME/.wine/drive_c/Program Files (x86)/Inno Setup 6/ISCC.exe" \
+            installer.iss /DMyAppVersion=${{ github.ref_name }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WinlatorShell_Setup
+          path: dist/WinlatorShell_Setup.exe
